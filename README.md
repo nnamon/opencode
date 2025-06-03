@@ -100,7 +100,7 @@ You can configure OpenCode using environment variables:
 | `AZURE_OPENAI_ENDPOINT`    | For Azure OpenAI models                                |
 | `AZURE_OPENAI_API_KEY`     | For Azure OpenAI models (optional when using Entra ID) |
 | `AZURE_OPENAI_API_VERSION` | For Azure OpenAI models                                |
-| `LOCAL_ENDPOINT`           | For self-hosted models                                 |
+| `LOCAL_ENDPOINT`           | For self-hosted models (fallback if not set in config) |
 | `SHELL`                    | Default shell to use (if not specified in config)      |
 
 ### Shell Configuration
@@ -143,6 +143,9 @@ This is useful if you want to use a different shell than your default system she
     "openrouter": {
       "apiKey": "your-api-key",
       "disabled": false
+    },
+    "local": {
+      "localEndpoint": "http://localhost:1234/v1"
     }
   },
   "agents": {
@@ -567,34 +570,72 @@ The AI assistant can access LSP features through the `diagnostics` tool, allowin
 
 While the LSP client implementation supports the full LSP protocol (including completions, hover, definition, etc.), currently only diagnostics are exposed to the AI assistant.
 
-## Using a self-hosted model provider
+## Using a Self-Hosted Model Provider
 
-OpenCode can also load and use models from a self-hosted (OpenAI-like) provider.
-This is useful for developers who want to experiment with custom models.
+OpenCode supports connecting to self-hosted (OpenAI-like) model providers. This is useful for running local LLMs, custom models, or models from providers not directly integrated.
 
-### Configuring a self-hosted provider 
+### Configuration Steps
 
-You can use a self-hosted model by setting the `LOCAL_ENDPOINT` environment variable.
-This will cause OpenCode to load and use the models from the specified endpoint.
+1.  **Configure the Endpoint:**
+    The primary way to configure your self-hosted provider is by adding its details to your OpenCode configuration file (`$HOME/.opencode.json` or local `.opencode.json`).
 
-```bash
-LOCAL_ENDPOINT=http://localhost:1235/v1
-```
-
-### Configuring a self-hosted model
-
-You can also configure a self-hosted model in the configuration file under the `agents` section:
-
-```json
-{
-  "agents": {
-    "coder": {
-      "model": "local.granite-3.3-2b-instruct@q8_0",
-      "reasoningEffort": "high"
+    Add a `local` provider entry with the `localEndpoint` field:
+    ```json
+    {
+      "providers": {
+        "local": {
+          "localEndpoint": "http://localhost:1234/v1"
+        }
+        // ... other providers
+      }
+      // ... other configurations
     }
-  }
-}
-```
+    ```
+    Replace `http://localhost:1234/v1` with the actual URL of your self-hosted model provider's API endpoint (usually ending in `/v1`).
+
+    As a fallback, OpenCode will check the `LOCAL_ENDPOINT` environment variable if `providers.local.localEndpoint` is not set in the configuration file. The JSON configuration takes precedence.
+    ```bash
+    # Example of setting the environment variable (used if not in JSON config)
+    export LOCAL_ENDPOINT="http://localhost:1234/v1"
+    ```
+
+2.  **Select the Model for an Agent:**
+    Once the endpoint is configured, OpenCode will attempt to list available models from that endpoint. To use one of these models, you need to specify it in the `agents` section of your configuration file. The model ID will typically be prefixed with `local.`.
+
+    ```json
+    {
+      "agents": {
+        "coder": {
+          "model": "local.your-model-id-from-endpoint"
+        }
+        // ... other agents
+      }
+      // ... other configurations
+    }
+    ```
+    Replace `your-model-id-from-endpoint` with the actual model ID as reported by your local endpoint (e.g., `local.Llama-3-8B-Instruct`, `local.Mistral-7B-v0.1@gguf`). You can often find these IDs by checking the `/v1/models` endpoint of your local server or its documentation.
+
+    For example, if your local server provides a model named `granite-3.3-2b-instruct@q8_0`, you would use:
+    ```json
+    {
+      "agents": {
+        "coder": {
+          "model": "local.granite-3.3-2b-instruct@q8_0",
+          "reasoningEffort": "high" // Optional, if model supports it
+        }
+      }
+    }
+    ```
+
+### How it Works
+
+When OpenCode starts:
+- It checks for `providers.local.localEndpoint` in your JSON configuration.
+- If not found, it checks for the `LOCAL_ENDPOINT` environment variable.
+- If an endpoint is determined, OpenCode queries the `/v1/models` path (or `/api/v0/models` for some LM Studio versions) on that endpoint to get a list of available models.
+- These models are then available for use in your agent configurations, prefixed with `local.`.
+
+This setup allows you to seamlessly integrate various locally hosted models into your OpenCode workflow.
 
 ## Development
 
