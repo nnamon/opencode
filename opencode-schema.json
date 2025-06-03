@@ -203,6 +203,11 @@
       },
       "type": "object"
     },
+    "autoCompact": {
+      "type": "boolean",
+      "description": "Automatically compact data on exit",
+      "default": true
+    },
     "contextPaths": {
       "default": [
         ".github/copilot-instructions.md",
@@ -344,6 +349,10 @@
             "description": "Whether the provider is disabled",
             "type": "boolean"
           },
+          "localEndpoint": {
+            "description": "The endpoint URL for a self-hosted (local) model provider (e.g., http://localhost:1234/v1). This is specific to the 'local' provider type.",
+            "type": "string"
+          },
           "provider": {
             "description": "Provider type",
             "enum": [
@@ -354,7 +363,8 @@
               "openrouter",
               "bedrock",
               "azure",
-              "vertexai"
+              "vertexai",
+              "local"
             ],
             "type": "string"
           }
@@ -362,6 +372,23 @@
         "type": "object"
       },
       "description": "LLM provider configurations",
+      "type": "object"
+    },
+    "shell": {
+      "description": "Shell configuration",
+      "properties": {
+        "args": {
+          "description": "Arguments for the shell",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "Path to the shell executable",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "tui": {

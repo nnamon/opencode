@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/spf13/viper"
 )
@@ -22,39 +23,64 @@ const (
 )
 
 func init() {
-	if endpoint := os.Getenv("LOCAL_ENDPOINT"); endpoint != "" {
-		localEndpoint, err := url.Parse(endpoint)
-		if err != nil {
-			logging.Debug("Failed to parse local endpoint",
-				"error", err,
-				"endpoint", endpoint,
-			)
-			return
+	cfg := config.Get()
+	var endpoint string
+
+	if cfg != nil && cfg.Providers != nil {
+		if providerCfg, ok := cfg.Providers[ProviderLocal]; ok && providerCfg.LocalEndpoint != "" {
+			endpoint = providerCfg.LocalEndpoint
+			logging.Debug("Using local endpoint from config", "endpoint", endpoint)
 		}
-
-		load := func(url *url.URL, path string) []localModel {
-			url.Path = path
-			return listLocalModels(url.String())
-		}
-
-		models := load(localEndpoint, lmStudioBetaModelsPath)
-
-		if len(models) == 0 {
-			models = load(localEndpoint, localModelsPath)
-		}
-
-		if len(models) == 0 {
-			logging.Debug("No local models found",
-				"endpoint", endpoint,
-			)
-			return
-		}
-
-		loadLocalModels(models)
-
-		viper.SetDefault("providers.local.apiKey", "dummy")
-		ProviderPopularity[ProviderLocal] = 0
 	}
+
+	if endpoint == "" {
+		envEndpoint := os.Getenv("LOCAL_ENDPOINT")
+		if envEndpoint != "" {
+			endpoint = envEndpoint
+			logging.Debug("Using local endpoint from environment variable", "endpoint", endpoint)
+		}
+	}
+
+	if endpoint == "" {
+		logging.Debug("No local endpoint configured (checked config 'providers.local.localEndpoint' and LOCAL_ENDPOINT env var). Skipping local model loading.")
+		return
+	}
+
+	localEndpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		logging.Warn("Failed to parse local endpoint URL",
+			"error", err,
+			"endpointURL", endpoint,
+		)
+		return
+	}
+
+	load := func(url *url.URL, path string) []localModel {
+		// Create a copy of the URL to avoid modifying the original localEndpointURL
+		targetURL := *url
+		targetURL.Path = path
+		return listLocalModels(targetURL.String())
+	}
+
+	models := load(localEndpointURL, lmStudioBetaModelsPath)
+
+	if len(models) == 0 {
+		models = load(localEndpointURL, localModelsPath)
+	}
+
+	if len(models) == 0 {
+		logging.Warn("No local models found",
+			"endpointURL", localEndpointURL.String(),
+		)
+		return
+	}
+
+	loadLocalModels(models)
+
+	// Set a dummy API key for the local provider so it's considered active
+	// by the validation logic in config.go, even if no real API key is needed.
+	viper.SetDefault("providers.local.apiKey", "dummy")
+	ProviderPopularity[ProviderLocal] = 0 // Initialize popularity
 }
 
 type localModelList struct {
